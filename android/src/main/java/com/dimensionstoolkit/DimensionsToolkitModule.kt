@@ -5,6 +5,7 @@ import android.graphics.Point
 import android.os.Build
 import android.view.Display
 import android.view.WindowManager
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.FoldingFeature
