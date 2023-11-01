@@ -68,7 +68,7 @@ class DimensionsToolkitModule(private val reactContext: ReactApplicationContext)
 
     val deviceListeners = Point()
 
-    lifecycleScope.launchDispatchers(Dispatchers.Main){
+    lifecycleScope.launch(Dispatchers.Main){
       lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED){
         WindowInfoTracker.getOrCreate(this@DimensionsToolkitModule)
           .windowLayoutInfo(this@DimensionsToolkitModule)
