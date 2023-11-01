@@ -68,7 +68,7 @@ class DimensionsToolkitModule(private val reactContext: ReactApplicationContext)
 
     val deviceListeners = Point()
 
-    lifecycleScope.launchDispatchers(.Main){
+    lifecycleScope.launchDispatchers(Dispatchers.Main){
       lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED){
         WindowInfoTracker.getOrCreate(this@DimensionsToolkitModule)
           .windowLayoutInfo(this@DimensionsToolkitModule)
@@ -84,8 +84,8 @@ class DimensionsToolkitModule(private val reactContext: ReactApplicationContext)
 
             when{
               foldingFeature.isTableTop() -> deviceListeners.foldType ="Table Top"
-              foldingFeature.isBookPosture() -> textViewPosture.foldType= "Book Posture"
-              else -> textViewPosture.foldType="Normal Posture"
+              foldingFeature.isBookPosture() -> deviceListeners.foldType= "Book Posture"
+              else -> deviceListeners.foldType="Normal Posture"
             }
           }
         // Get EventEmitter from context and send event thanks to it
