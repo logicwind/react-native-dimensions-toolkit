@@ -5,6 +5,12 @@ import android.graphics.Point
 import android.os.Build
 import android.view.Display
 import android.view.WindowManager
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.facebook.react.bridge.*
 import java.lang.Exception
 
@@ -57,6 +63,49 @@ class DimensionsToolkitModule(private val reactContext: ReactApplicationContext)
     }
     return size
   }
+
+  private fun onStartFold(): Point {
+
+    val deviceListeners = Point()
+
+    lifecycleScope.launchDispatchers(.Main){
+      lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED){
+        WindowInfoTracker.getOrCreate(this@DimensionsToolkitModule)
+          .windowLayoutInfo(this@DimensionsToolkitModule)
+          .collect{layoutInfo->
+            if (layoutInfo.displayFeatures.isNotEmpty()){
+              deviceListeners.displayStatus = "Multiple displays"
+            }else{
+              deviceListeners.displayStatus = "Single display"
+            }
+
+            val foldingFeature = layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
+              .firstOrNull() ?: return@collect
+
+            when{
+              foldingFeature.isTableTop() -> deviceListeners.foldType ="Table Top"
+              foldingFeature.isBookPosture() -> textViewPosture.foldType= "Book Posture"
+              else -> textViewPosture.foldType="Normal Posture"
+            }
+          }
+        // Get EventEmitter from context and send event thanks to it
+        this.reactContext
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          .emit("onFold", deviceListeners)
+      }
+    }
+
+  }
+
+  private fun FoldingFeature.isTableTop() : Boolean =
+    state == FoldingFeature.State.HALF_OPENED &&
+      orientation == FoldingFeature.Orientation.HORIZONTAL
+
+  private fun FoldingFeature.isBookPosture() : Boolean =
+    state == FoldingFeature.State.HALF_OPENED &&
+      orientation == FoldingFeature.Orientation.VERTICAL
+
+
 
   companion object {
     const val NAME = "DimensionsToolkit"
