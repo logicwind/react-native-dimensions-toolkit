@@ -3,22 +3,19 @@ package com.dimensionstoolkit
 import android.content.Context.WINDOW_SERVICE
 import android.graphics.Point
 import android.os.Build
+import android.view.Display
 import android.view.WindowManager
-import androidx.window.layout.FoldingFeature
 import com.facebook.react.bridge.*
-
-
+import java.lang.Exception
 
 class DimensionsToolkitModule(private val reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
+  ReactContextBaseJavaModule(reactContext) {
 
   private val density: Float by lazy { reactApplicationContext.resources.displayMetrics.density }
-  data class FoldingEvent(val displayStatus: String, val foldType: String)
 
   override fun getName(): String {
     return NAME
   }
-
 
   @ReactMethod
   fun getScreenSize(promise: Promise) {
@@ -51,24 +48,15 @@ class DimensionsToolkitModule(private val reactContext: ReactApplicationContext)
       size.x = widthInDp
       size.y = heightInDp
     } else
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-      try {
-        display.getRealSize(size)
-      } catch (e: Exception) {
-        e.printStackTrace()
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        try {
+          display.getRealSize(size)
+        } catch (e: Exception) {
+          e.printStackTrace()
+        }
       }
-    }
     return size
   }
-
-  private fun FoldingFeature.isTableTop() : Boolean =
-    state == FoldingFeature.State.HALF_OPENED &&
-      orientation == FoldingFeature.Orientation.HORIZONTAL
-
-  private fun FoldingFeature.isBookPosture() : Boolean =
-    state == FoldingFeature.State.HALF_OPENED &&
-      orientation == FoldingFeature.Orientation.VERTICAL
-
 
   companion object {
     const val NAME = "DimensionsToolkit"

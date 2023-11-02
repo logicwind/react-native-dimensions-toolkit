@@ -5,6 +5,7 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class FoldMonitoringModule(private val reactContext: ReactApplicationContext):
@@ -14,6 +15,7 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext):
 
   private val foldingEvent = MutableLiveData<FoldingEvent>()
 
+  @ReactMethod
   fun startFoldingEventMonitoring(lifecycleOwner: LifecycleOwner) {
     val lifecycleScope = lifecycleOwner.lifecycleScope
 
@@ -44,8 +46,12 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext):
   }
 
   override fun getName(): String {
-    TODO("Not yet implemented")
+    return NAME
   }
+  companion object {
+    const val NAME = "FoldMonitoringKit"
+  }
+
 }
 
 private fun FoldingFeature.isTableTop() : Boolean =
@@ -55,7 +61,6 @@ private fun FoldingFeature.isTableTop() : Boolean =
 private fun FoldingFeature.isBookPosture() : Boolean =
   state == FoldingFeature.State.HALF_OPENED &&
     orientation == FoldingFeature.Orientation.VERTICAL
-
 
 
 
