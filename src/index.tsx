@@ -14,14 +14,18 @@ interface ScreenSize {
 const DimensionsToolkit = NativeModules.DimensionsToolkit
   ? NativeModules.DimensionsToolkit
   : new Proxy(
-    {},
-    {
-      get() {
-        throw new Error(LINKING_ERROR);
-      },
-    }
-  );
+      {},
+      {
+        get() {
+          throw new Error(LINKING_ERROR);
+        },
+      }
+    );
 
 export function getScreenSize(): Promise<ScreenSize> {
-  return DimensionsToolkit.getScreenSize()
+  return DimensionsToolkit.getScreenSize();
+}
+
+export function startFoldingListeners() {
+  return NativeModules.FoldMonitoringKit;
 }
