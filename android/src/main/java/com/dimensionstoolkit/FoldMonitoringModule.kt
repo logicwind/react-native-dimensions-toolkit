@@ -7,6 +7,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -16,8 +18,11 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   private val foldingEvent = MutableLiveData<FoldingEvent>()
 
   @ReactMethod
-  fun startFoldingEventMonitoring() {
-    val lifecycleOwner = currentActivity as? LifecycleOwner ?: return
+  suspend fun startFoldingEventMonitoring() {
+    val lifecycleOwner = currentActivity as? LifecycleOwner
+    if (lifecycleOwner == null) {
+      return
+    }
 
     val lifecycleScope = lifecycleOwner.lifecycleScope
 
@@ -35,15 +40,21 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
               ?: "Normal Posture"
           )
 
-          foldingEvent.value = event
+          // Switch to the main thread before invoking observe
+          withContext(Dispatchers.Main) {
+            foldingEvent.value = event
+          }
         }
     }
 
-    foldingEvent.observe(lifecycleOwner) { event ->
-      // Handle the event, e.g., emit it to React Native
-      reactContext
-        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit("onFold", event)
+    // Switch to the main thread before invoking observe
+    withContext(Dispatchers.Main) {
+      foldingEvent.observe(lifecycleOwner) { event ->
+        // Handle the event, e.g., emit it to React Native
+        reactContext
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          .emit("onFold", event)
+      }
     }
   }
 
