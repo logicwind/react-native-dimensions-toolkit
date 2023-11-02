@@ -1,14 +1,18 @@
-package com.dimensionstoolkit
-
-import androidx.lifecycle.*
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.lifecycleScope
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactContextBaseJavaModule
-import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.*
+
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import com.facebook.react.bridge.WritableMap
-import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.bridge.Arguments
+import kotlinx.coroutines.flow.flow
+
 
 class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -18,35 +22,61 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   private val foldingEvent = MutableLiveData<FoldingEvent>()
 
   @ReactMethod
-  fun startFoldingEventMonitoring() {
-    val lifecycleOwner = currentActivity as? LifecycleOwner ?: return
+  fun startFoldingEventMonitoring(promise: Promise) {
+    val lifecycleOwner = currentActivity as? LifecycleOwner
+    if (lifecycleOwner == null) {
+      promise.reject("LIFECYCLE_ERROR", "Could not find a valid LifecycleOwner.")
+      return
+    }
 
     val lifecycleScope = lifecycleOwner.lifecycleScope
 
     lifecycleScope.launchWhenStarted {
-      WindowInfoTracker.getOrCreate(reactContext)
-        .windowLayoutInfo(reactContext)
-        .flowWithLifecycle(lifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-        .collect { layoutInfo ->
-          val event = FoldingEvent(
-            displayStatus = if (layoutInfo.displayFeatures.isNotEmpty()) "Multiple displays" else "Single display",
-            foldType = layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
-              .firstOrNull { it.isTableTop() }?.let { "Table Top" }
-              ?: layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
-                .firstOrNull { it.isBookPosture() }?.let { "Book Posture" }
-              ?: "Normal Posture"
-          )
-
-          foldingEvent.postValue(event)
-        }
-    }
-
-    foldingEvent.observe(lifecycleOwner) { event ->
-      reactContext
-        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit("onFold", Arguments.makeNativeMap(event.toWritableMap()))
+      try {
+        val event = monitorFoldingEvents(lifecycleOwner)
+        promise.resolve(event.toWritableMap())
+      } catch (e: Exception) {
+        promise.reject("MONITORING_ERROR", e.message, e)
+      }
     }
   }
+
+
+  private suspend fun monitorFoldingEvents(lifecycleOwner: LifecycleOwner): FoldingEvent {
+    return suspendCancellableCoroutine { continuation ->
+      val foldingFeatureFlow = flow {
+        WindowInfoTracker.getOrCreate(reactContext)
+          .windowLayoutInfo(reactContext)
+          .collect() { layoutInfo ->
+            val event = FoldingEvent(
+              displayStatus = if (layoutInfo.displayFeatures.isNotEmpty()) "Multiple displays" else "Single display",
+              foldType = layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
+                .firstOrNull { it.isTableTop() }?.let { "Table Top" }
+                ?: layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
+                  .firstOrNull { it.isBookPosture() }?.let { "Book Posture" }
+                ?: "Normal Posture"
+            )
+            emit(event)
+          }
+      }
+
+      val job = lifecycleOwner.lifecycleScope.launch {
+        try {
+          foldingFeatureFlow.collect { event ->
+            continuation.resume(event)
+          }
+        } catch (e: Exception) {
+          continuation.resumeWithException(e)
+        }
+      }
+
+      continuation.invokeOnCancellation {
+        job.cancel()
+      }
+    }
+  }
+
+
   private fun FoldingEvent.toWritableMap(): WritableMap {
     val map = Arguments.createMap()
     map.putString("displayStatus", displayStatus)
@@ -55,14 +85,9 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   }
 
   override fun getName(): String {
-    return NAME
-  }
-
-  companion object {
-    const val NAME = "FoldMonitoringKit"
+    return "FoldMonitoringKit"
   }
 }
-
 private fun FoldingFeature.isTableTop(): Boolean =
   state == FoldingFeature.State.HALF_OPENED &&
     orientation == FoldingFeature.Orientation.HORIZONTAL
