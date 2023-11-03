@@ -22,10 +22,21 @@ const DimensionsToolkit = NativeModules.DimensionsToolkit
       }
     );
 
+const FoldMonitoringKit = NativeModules.FoldMonitoringKit
+  ? NativeModules.FoldMonitoringKit
+  : new Proxy(
+      {},
+      {
+        get() {
+          throw new Error(LINKING_ERROR);
+        },
+      }
+    );
+
 export function getScreenSize(): Promise<ScreenSize> {
   return DimensionsToolkit.getScreenSize();
 }
 
 export function startFoldingListeners() {
-  return NativeModules.FoldMonitoringKit;
+  return FoldMonitoringKit.startFoldingEventMonitoring();
 }
