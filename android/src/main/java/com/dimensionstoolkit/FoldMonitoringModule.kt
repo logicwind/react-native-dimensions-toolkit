@@ -3,12 +3,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.facebook.react.bridge.*
-import kotlinx.coroutines.launch
-import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.*
-
+import kotlinx.coroutines.launch
 
 class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -28,29 +28,30 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
-    val foldingFeatureFlow: Flow<FoldingFeature> = flow {
+    val foldingFeatureFlow: Flow<FoldingFeature?> = flow {
       WindowInfoTracker.getOrCreate(reactContext)
         .windowLayoutInfo(reactContext)
         .collect { layoutInfo ->
-          layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()?.let {
-            emit(it)
-          }
+          val foldingFeature = layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()
+          emit(foldingFeature)
         }
     }
 
     isMonitoring = true
     lifecycleOwner.lifecycleScope.launch {
-      foldingFeatureFlow.collect { foldingFeature ->
-        val foldType = when {
-          foldingFeature.isTableTop() -> "Table Top"
-          foldingFeature.isBookPosture() -> "Book Posture"
-          else -> "Normal Posture"
+      foldingFeatureFlow
+        .filterNotNull()
+        .collect { foldingFeature ->
+          val foldType = when {
+            foldingFeature.isTableTop() -> "Table Top"
+            foldingFeature.isBookPosture() -> "Book Posture"
+            else -> "Normal Posture"
+          }
+          val event = Arguments.createMap()
+          event.putString("foldType", foldType)
+          reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("onFold", event)
         }
-        val event = Arguments.createMap()
-        event.putString("foldType", foldType)
-        reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-          .emit("onFold", event)
-      }
     }
 
     promise.resolve("Folding event monitoring started.")
