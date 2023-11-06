@@ -1,6 +1,9 @@
 package com.dimensionstoolkit
 
+import android.os.Handler
+import android.os.Looper
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.window.layout.FoldingFeature
@@ -8,6 +11,7 @@ import androidx.window.layout.WindowInfoTracker
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -41,36 +45,44 @@ class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
 
     isMonitoring = true
 
-    // Add a lifecycle observer to automatically start and stop monitoring
+    val mainHandler = Handler(Looper.getMainLooper())
+
+    // Add a lifecycle observer to automatically start and stop monitoring on the main thread
     val lifecycleObserver = object : DefaultLifecycleObserver {
       override fun onStart(owner: LifecycleOwner) {
-        lifecycleOwner.lifecycleScope.launch {
-          foldingFeatureFlow
-            .filterNotNull()
-            .collect { foldingFeature ->
-              val foldType = when {
-                foldingFeature.isTableTop() -> "Table Top"
-                foldingFeature.isBookPosture() -> "Book Posture"
-                else -> "Normal Posture"
+        mainHandler.post {
+          lifecycleOwner.lifecycleScope.launch {
+            foldingFeatureFlow
+              .filterNotNull()
+              .collect { foldingFeature ->
+                val foldType = when {
+                  foldingFeature.isTableTop() -> "Table Top"
+                  foldingFeature.isBookPosture() -> "Book Posture"
+                  else -> "Normal Posture"
+                }
+                val event = Arguments.createMap()
+                event.putString("foldType", foldType)
+                reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                  .emit("onFold", event)
               }
-              val event = Arguments.createMap()
-              event.putString("foldType", foldType)
-              reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit("onFold", event)
-            }
+          }
         }
       }
     }
 
-    lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+    mainHandler.post {
+      lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+    }
 
     promise.resolve("Folding event monitoring started.")
   }
-
+  
 
   override fun getName(): String {
     return "FoldMonitoringKit"
   }
+
+  private val mainHandler = Handler(Looper.getMainLooper())
 
   private fun FoldingFeature.isTableTop(): Boolean =
     state == FoldingFeature.State.HALF_OPENED && orientation == FoldingFeature.Orientation.HORIZONTAL
