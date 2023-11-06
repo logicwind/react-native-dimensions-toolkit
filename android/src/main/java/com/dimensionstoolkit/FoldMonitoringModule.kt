@@ -1,3 +1,5 @@
+package com.dimensionstoolkit
+
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
