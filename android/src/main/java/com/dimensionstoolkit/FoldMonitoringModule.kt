@@ -1,136 +1,112 @@
 package com.dimensionstoolkit
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
+
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.facebook.react.bridge.*
-import com.facebook.react.modules.core.DeviceEventManagerModule
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.bridge.Arguments
+import kotlinx.coroutines.flow.callbackFlow
 
-object LifecycleLogger {
-  private const val TAG = "LifecycleLogger"
-
-  fun log(message: String) {
-    Log.d(TAG, message)
-  }
+interface FoldMonitoringCallback {
+  fun onFoldingEvent(event: WritableMap)
+  fun onError(errorCode: String, errorMessage: String, error: Throwable)
 }
 
 class FoldMonitoringModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
-  private var isMonitoring = false
-  private var foldingObserver: DefaultLifecycleObserver? = null
+  data class FoldingEvent(val displayStatus: String, val foldType: String)
+
+  private var foldMonitoringCallback: FoldMonitoringCallback? = null
 
   @ReactMethod
   fun startFoldingEventMonitoring(promise: Promise) {
-    if (isMonitoring) {
-      promise.reject("ALREADY_MONITORING", "Monitoring is already in progress.")
-      return
-    }
-
     val lifecycleOwner = currentActivity as? LifecycleOwner
     if (lifecycleOwner == null) {
       promise.reject("LIFECYCLE_ERROR", "Could not find a valid LifecycleOwner.")
       return
     }
 
-    val foldingFeatureFlow: Flow<FoldingFeature?> = flow {
+    val lifecycleScope = lifecycleOwner.lifecycleScope
+
+    val callback = object : FoldMonitoringCallback {
+      override fun onFoldingEvent(event: WritableMap) {
+        promise.resolve(event)
+      }
+
+      override fun onError(errorCode: String, errorMessage: String, error: Throwable) {
+        promise.reject(errorCode, errorMessage, error)
+      }
+    }
+
+    foldMonitoringCallback = callback
+
+    lifecycleScope.launchWhenStarted {
+      try {
+        monitorFoldingEvents(lifecycleOwner)
+      } catch (e: Exception) {
+        callback.onError("MONITORING_ERROR", e.message ?: "Unknown error", e)
+      }
+    }
+  }
+
+  private suspend fun monitorFoldingEvents(lifecycleOwner: LifecycleOwner) {
+    val foldingFeatureFlow = callbackFlow {
       WindowInfoTracker.getOrCreate(reactContext)
         .windowLayoutInfo(reactContext)
         .collect { layoutInfo ->
-          val foldingFeature = layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()
-          emit(foldingFeature)
+          val event = FoldingEvent(
+            displayStatus = if (layoutInfo.displayFeatures.isNotEmpty()) "Multiple displays" else "Single display",
+            foldType = layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
+              .firstOrNull { it.isTableTop() }?.let { "Table Top" }
+              ?: layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>()
+                .firstOrNull { it.isBookPosture() }?.let { "Book Posture" }
+              ?: "Normal Posture"
+          )
+
+          val eventMap = event.toWritableMap()
+          send(eventMap)
         }
     }
 
-    isMonitoring = true
-
-    val mainHandler = Handler(Looper.getMainLooper())
-
-    // Add a lifecycle observer to automatically start and stop monitoring on the main thread
-    foldingObserver = object : DefaultLifecycleObserver {
-      override fun onStart(owner: LifecycleOwner) {
-        // Log a message when the lifecycle enters the onStart event
-        LifecycleLogger.log("Lifecycle onStart event")
-
-        // Your existing code to start monitoring goes here
-
-        mainHandler.post {
-          lifecycleOwner.lifecycleScope.launch {
-            foldingFeatureFlow
-              .filterNotNull()
-              .collect { foldingFeature ->
-                Log.d(foldingFeature.toString(), "foldingFeature:>>")
-
-                val foldType = when {
-                  foldingFeature.isTableTop() -> "Table Top"
-                  foldingFeature.isBookPosture() -> "Book Posture"
-                  else -> "Normal Posture"
-                }
-
-                Log.d(foldType.toString(), "foldType:>>")
-
-                val event = Arguments.createMap()
-                event.putString("foldType", foldType)
-                reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                  .emit("onFold", event)
-              }
-          }
+    val job = lifecycleOwner.lifecycleScope.launch {
+      try {
+        foldingFeatureFlow.collect { event ->
+          foldMonitoringCallback?.onFoldingEvent(event)
         }
-      }
-
-      override fun onStop(owner: LifecycleOwner) {
-        // Log a message when the lifecycle enters the onStop event
-        LifecycleLogger.log("Lifecycle onStop event")
-
-        // Your existing code to stop monitoring goes here
+      } catch (e: Exception) {
+        foldMonitoringCallback?.onError("MONITORING_ERROR", e.message ?: "Unknown error", e)
       }
     }
 
-    mainHandler.post {
-      lifecycleOwner.lifecycle.addObserver(foldingObserver as DefaultLifecycleObserver)
-    }
-
-    promise.resolve("Folding event monitoring started.")
+    lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+      override fun onDestroy(owner: LifecycleOwner) {
+        job.cancel()
+        foldMonitoringCallback = null
+      }
+    })
   }
 
-  @ReactMethod
-  fun stopFoldingEventMonitoring(promise: Promise) {
-    if (!isMonitoring) {
-      promise.reject("NOT_MONITORING", "Monitoring is not in progress.")
-      return
-    }
-
-    val lifecycleOwner = currentActivity as? LifecycleOwner
-    if (lifecycleOwner != null && foldingObserver != null) {
-      val mainHandler = Handler(Looper.getMainLooper())
-      mainHandler.post {
-        lifecycleOwner.lifecycle.removeObserver(foldingObserver!!)
-      }
-    }
-
-    isMonitoring = false
-    promise.resolve("Folding event monitoring stopped.")
+  private fun FoldingEvent.toWritableMap(): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("displayStatus", displayStatus)
+    map.putString("foldType", foldType)
+    return map
   }
 
   override fun getName(): String {
     return "FoldMonitoringKit"
   }
-
-  private val mainHandler = Handler(Looper.getMainLooper())
-
-  private fun FoldingFeature.isTableTop(): Boolean =
-    state == FoldingFeature.State.HALF_OPENED && orientation == FoldingFeature.Orientation.HORIZONTAL
-
-  private fun FoldingFeature.isBookPosture(): Boolean =
-    state == FoldingFeature.State.HALF_OPENED && orientation == FoldingFeature.Orientation.VERTICAL
 }
+
+private fun FoldingFeature.isTableTop(): Boolean =
+  state == FoldingFeature.State.HALF_OPENED &&
+    orientation == FoldingFeature.Orientation.HORIZONTAL
+
+private fun FoldingFeature.isBookPosture(): Boolean =
+  state == FoldingFeature.State.HALF_OPENED &&
+    orientation == FoldingFeature.Orientation.VERTICAL
