@@ -9,7 +9,7 @@ import com.facebook.react.bridge.*
 import java.lang.Exception
 
 class DimensionsToolkitModule(private val reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
+  ReactContextBaseJavaModule(reactContext) {
 
   private val density: Float by lazy { reactApplicationContext.resources.displayMetrics.density }
 
@@ -48,13 +48,13 @@ class DimensionsToolkitModule(private val reactContext: ReactApplicationContext)
       size.x = widthInDp
       size.y = heightInDp
     } else
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-      try {
-        display.getRealSize(size)
-      } catch (e: Exception) {
-        e.printStackTrace()
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        try {
+          display.getRealSize(size)
+        } catch (e: Exception) {
+          e.printStackTrace()
+        }
       }
-    }
     return size
   }
 

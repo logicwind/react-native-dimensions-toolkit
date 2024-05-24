@@ -8,7 +8,14 @@ import com.facebook.react.uimanager.ViewManager
 
 class DimensionsToolkitPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(DimensionsToolkitModule(reactContext))
+    val modules = mutableListOf<NativeModule>()
+
+    // Add your custom module to the list
+    modules.add(FoldMonitoringModule(reactContext))
+    // Add the DimensionsToolkitModule from the previous package
+    modules.add(DimensionsToolkitModule(reactContext))
+
+    return modules
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

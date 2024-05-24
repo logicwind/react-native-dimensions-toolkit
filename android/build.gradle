@@ -81,12 +81,13 @@ android {
     sourceCompatibility JavaVersion.VERSION_1_8
     targetCompatibility JavaVersion.VERSION_1_8
   }
-
 }
 
 repositories {
-  mavenCentral()
   google()
+  jcenter()
+  mavenLocal()
+  mavenCentral()
 }
 
 def kotlin_version = getExtOrDefault("kotlinVersion")
@@ -94,9 +95,18 @@ def kotlin_version = getExtOrDefault("kotlinVersion")
 dependencies {
   // For < 0.71, this will be from the local maven repo
   // For > 0.71, this will be replaced by `com.facebook.react:react-android:$version` by react gradle plugin
-  //noinspection GradleDynamicVersion
+    //noinspection GradleDynamicVersion
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+  implementation "androidx.window:window:1.1.0"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.2"
+  implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.4.0"
+  implementation "androidx.lifecycle:lifecycle-viewmodel:2.3.1"
+  implementation "androidx.lifecycle:lifecycle-livedata:2.3.1"
+  implementation "androidx.lifecycle:lifecycle-runtime:2.3.1"
+  implementation "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.3.1"
+  implementation "androidx.lifecycle:lifecycle-extensions:2.2.0"
+
 }
 
 if (isNewArchitectureEnabled()) {
